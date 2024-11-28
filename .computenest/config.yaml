@@ -1,17 +1,23 @@
 Service:
   RegionId: cn-hangzhou
   DeployType: ros
+  OperationMetadata:
+    StatusOperationConfigs:
+      - TemplateName: '单机版'
+        SupportOperations:
+          - Start
+          - Stop
+          - Restart
+    SupportBackup: true
   DeployMetadata:
     SupplierDeployMetadata:
-      AcrImageArtifactRelation:
-        # 相应的，ros模板中也需要采用该伪参数
-        '{{ computenest::acrimage::LYH-RAIN_go-proxy-bingai-dockerfile }}':
+      FileArtifactRelation:
+        '{{ computenest::file::LYH-RAIN_go-proxy-bingai-docker-compose }}':
           ArtifactId: ${Artifact.Artifact_1.ArtifactId}
           ArtifactVersion: ${Artifact.Artifact_1.ArtifactVersion}
     TemplateConfigs:
-      - Name: ECS单机版
+      - Name: 单机版
         Url: 'ros_templates/template.yaml'
-        # 未选择部署地域则采用 []
         AllowedRegions:
           - cn-hangzhou
           - cn-shanghai
@@ -19,21 +25,25 @@ Service:
   ServiceType: private
   ServiceInfo:
     Locale: zh-CN
-    ShortDescription: demo
+    ShortDescription: docker compose deploy
     Image: 'resources/icons/service_logo.png'
 Artifact:
   Artifact_1:
+    ArtifactType: File
+    ArtifactName: LYH-RAIN_go-proxy-bingai-docker-compose
+    ArtifactProperty:
+      RegionId: cn-hangzhou
+      Url: 'resources/artifact_resources/docker_compose.tar'
+  Artifact_2:
     ArtifactType: AcrImage
-    # 采用与image_name相同的ArtifactName
-    ArtifactName: lyh-rain_go-proxy-bingai-dockerfile
+    ArtifactName: AcrImage-adams549659584-go-proxy-bingai
     ArtifactProperty:
       RepoName: ${AcrImageBuilder.AcrImage_1.RepoName}
       Tag: ${AcrImageBuilder.AcrImage_1.Tag}
+      RepoType: Public
 AcrImageBuilder:
   AcrImage_1:
-    # dockerfile路径
-    DockerFilePath: docker/Dockerfile
-    # 采用与image_name相同的repoName
-    RepoName: lyh-rain_go-proxy-bingai-dockerfile
-    Tag: 1.0.0
-    DockerBuildArgs: {}
+    BuildType: DockerRepo
+    DockerRepoUrl: adams549659584/go-proxy-bingai
+    RepoName: adams549659584/go-proxy-bingai
+    Tag: latest

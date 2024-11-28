@@ -1,7 +1,4 @@
 ROSTemplateFormatVersion: '2015-09-01'
-Description:
-  en: Docker Service Ros Template
-  zh-cn: Docker-ECS单机版服务模板
 Conditions:
   CreateVpcConditions:
     Fn::Equals:
@@ -154,6 +151,11 @@ Parameters:
       en: Zone ID
       zh-cn: 可用区ID
     AssociationProperty: ALIYUN::ECS::Instance::ZoneId
+    AssociationPropertyMetadata:
+      DefaultValueStrategy: random
+      InstanceChargeType: ${PayType}
+      SystemDiskCategory: cloud_essd
+      InstanceType: ${EcsInstanceType}
   VpcId:
     Type: String
     Label:
@@ -166,6 +168,7 @@ Parameters:
         - ${VpcOption}
     Default: ''
     AssociationPropertyMetadata:
+      AutoSelectFirst: true
       Visible:
         Condition:
           Fn::Equals:
@@ -183,18 +186,14 @@ Parameters:
         - ExistingVPC
         - ${VpcOption}
     AssociationPropertyMetadata:
-      VpcId: VpcId
-      ZoneId: ZoneId
+      AutoSelectFirst: true
+      VpcId: ${VpcId}
+      ZoneId: ${ZoneId}
       Visible:
         Condition:
           Fn::Equals:
             - ExistingVPC
             - ${VpcOption}
-  Password:
-    Type: String
-    AssociationProperty: ALIYUN::ECS::Instance::Password
-    Label: 密码
-    NoEcho: True
 Resources:
   # 新建vpc
   EcsVpc:
@@ -273,30 +272,46 @@ Resources:
     Properties:
       InstanceIds:
         Fn::GetAtt:
-          - InstanceGroup
-          - InstanceIds
+        - InstanceGroup
+        - InstanceIds
       Type: RunShellScript
       Sync: true
       Timeout: 3600
-      CommandContent: |-
-        #!/bin/bash
-        # dockerjsonConfig解析
-        dockerJson='{{ computenest::acr::dockerconfigjson }}'
-        decodeDockerJson=$(echo $dockerJson | base64 -d)
-        host=$(echo $decodeDockerJson | jq '.auths' | jq 'keys' | jq .[0])
-        username=$(echo $decodeDockerJson | jq ".auths.$host.username" | tr -d '"')
-        password=$(echo $decodeDockerJson | jq ".auths.$host.password" | tr -d '"')
-        host=$(echo $host | tr -d '"')
-        docker login $host --username=$username --password=$password
-        docker pull '{{ computenest::acrimage::LYH-RAIN_go-proxy-bingai-dockerfile }}'
-        docker run -d -p 8080:8080 -e Password=${Password} '{{ computenest::acrimage::LYH-RAIN_go-proxy-bingai-dockerfile }}'
+      CommandContent:
+        Fn::Sub:
+          - |
+            wget '{{ computenest::file::LYH-RAIN_go-proxy-bingai-docker-compose }}' -O /root/application/docker_compose.tar
+            tar -xvf /root/application/docker_compose.tar -C /root/application
 
-Outputs:
-  
-  ServerAddress1:
+            cat > /etc/systemd/system/go-proxy-bingai.service <<EOF
+            [Unit]
+            Description=Docker Compose Application Service
+            Requires=docker.service
+            After=docker.service
+
+            [Service]
+            Type=oneshot
+            RemainAfterExit=yes
+            WorkingDirectory=/root/application/docker_compose
+            ExecStart=/usr/bin/docker compose -f docker/docker-compose.yml up -d
+            ExecStop=/usr/bin/docker compose down
+            TimeoutStartSec=0
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            systemctl enable go-proxy-bingai
+
+            
+            systemctl start go-proxy-bingai
+          - RegionId:
+              Ref: ALIYUN::Region
+Outputs: 
+  go-proxy-bingai_address:
     Description:
-      en: ServerAddress1
-      zh-cn: 访问页面1
+      en: go-proxy-bingai address.
+      zh-cn: go-proxy-bingai 访问页面。
     Value:
       Fn::Sub:
         - http://${ServerAddress}:8080
@@ -304,9 +319,8 @@ Outputs:
             Fn::Select:
               - 0
               - Fn::GetAtt:
-                - InstanceGroup
-                - PublicIps
-  
+                  - InstanceGroup
+                  - PublicIps
 Metadata:
   ALIYUN::ROS::Interface:
     ParameterGroups:
@@ -330,9 +344,4 @@ Metadata:
           - VSwitchCidrBlock
         Label:
           default: 可用区配置
-      - Parameters:
-        - Password
-        Label:
-          en: Software Configuration
-          zh-cn: 软件配置
       
